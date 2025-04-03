@@ -8,7 +8,7 @@ import json
 
 
 def save_current_user(user):
-    """Persist the current user data to a JSON file."""
+    """Persist the current user data to a JSON file.  """
     config_dir = os.path.join(os.getcwd(), "config")
     if not os.path.exists(config_dir):
         os.makedirs(config_dir)
