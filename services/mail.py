@@ -41,22 +41,23 @@ def send_email(to_email, subject, html_content, plain_text_content=None):
     return True
 
 # -------------------- Email Templates --------------------
-def forgot_password_template(reset_link):
-    subject = "Playful Minds - Password Reset Request"
-    plain_text = f"Hello,\n\nTo reset your password, please click the link below:\n{reset_link}\n\nIf you did not request a password reset, please ignore this email.\n\nRegards,\nPlayful Minds Team"
+def forgot_password_template(new_password):
+    subject = "Playful Minds - Your New Password"
+    plain_text = f"Hello,\n\nYour password has been reset. Your new password is:\n{new_password}\n\nPlease log in and change your password immediately.\n\nRegards,\nPlayful Minds Team"
     html_content = f"""
     <html>
-      <body>
+    <body>
         <p>Hello,</p>
-        <p>To reset your password, please click the link below:</p>
-        <p><a href="{reset_link}">Reset Password</a></p>
-        <p>If you did not request a password reset, please ignore this email.</p>
+        <p>Your password has been reset. Your new password is:</p>
+        <h2>{new_password}</h2>
+        <p>Please log in and change your password immediately.</p>
         <br>
         <p>Regards,<br>Playful Minds Team</p>
-      </body>
+    </body>
     </html>
     """
     return subject, plain_text, html_content
+
 
 def welcome_admin_template(admin_first_name):
     subject = "Welcome to Playful Minds Admin Portal"
@@ -107,8 +108,8 @@ def report_email_template(report_content):
     return subject, plain_text, html_content
 
 # -------------------- Functions to Send Specific Emails --------------------
-def send_forgot_password_email(to_email, reset_link):
-    subject, plain_text, html_content = forgot_password_template(reset_link)
+def send_forgot_password_email(to_email):
+    subject, plain_text, html_content = forgot_password_template()
     return send_email(to_email, subject, html_content, plain_text)
 
 def send_welcome_admin_email(to_email, admin_first_name):

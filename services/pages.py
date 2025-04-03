@@ -5,7 +5,24 @@ import bcrypt  # for checking hashed passwords in admin login
 import datetime
 from services import db, utils, mail, sessions, logs
 import json
+from services.mail import forgot_password_template
 
+# Helper function to generate a strong password.
+def generate_strong_password(length=12):
+    characters = string.ascii_letters + string.digits + string.punctuation
+    while True:
+        password = ''.join(secrets.choice(characters) for _ in range(length))
+        if (any(c.islower() for c in password) and
+            any(c.isupper() for c in password) and
+            any(c.isdigit() for c in password) and
+            any(c in string.punctuation for c in password)):
+            return password
+
+def exit_application(e):
+    # Log the exit action; if no user is logged in, use 0 as the ID.
+    user_id = current_user.get("id", 0) if "current_user" in globals() and current_user else 0
+    logs.log_event(user_id, "exit", "User exited the application.")
+    sys.exit()
 
 def save_current_user(user):
     """Persist the current user data to a JSON file.  """
@@ -29,46 +46,128 @@ current_user = None
 
 # -------------------- Landing View --------------------
 def landing_view(page: ft.Page, games):
+    # Clear existing views.
     page.views.clear()
+
+    # Load accounts from database.
+    accounts = db.load_accounts()
+    # Check if an admin account exists.
+    admin_exists = any(account["role"].lower() == "admin" for account in accounts.values()) if accounts else False
+
+    left_panel_controls = []
+
+    if not admin_exists:
+        # No admin account exists: prompt user to create one.
+        left_panel_controls.append(
+            ft.Text("Welcome! Please create an admin account to get started.", size=18, weight="bold",
+                    color=ft.Colors.WHITE)
+        )
+        left_panel_controls.append(ft.Divider(color=ft.Colors.WHITE))
+        left_panel_controls.append(
+            ft.ListTile(
+                leading=ft.Icon(name=ft.icons.PERSON, color=ft.Colors.WHITE),
+                title=ft.Text("Create Player Account", color=ft.Colors.WHITE),
+                on_click=lambda e: go_to_view(page, create_player_account_view, games)
+            )
+        )
+        left_panel_controls.append(
+            ft.ListTile(
+                leading=ft.Icon(name=ft.icons.PERSON, color=ft.Colors.WHITE),
+                title=ft.Text("Create Admin Account", color=ft.Colors.WHITE),
+                on_click=lambda e: go_to_view(page, create_admin_account_view, games)
+            )
+        )
+    else:
+        # An admin account exists: show standard login and navigation options.
+        left_panel_controls.append(
+            ft.ListTile(
+                leading=ft.Icon(name=ft.icons.PERSON, color=ft.Colors.WHITE),
+                title=ft.Text("Player Login", color=ft.Colors.WHITE),
+                on_click=lambda e: go_to_view(page, player_login_view, games)
+            )
+        )
+        left_panel_controls.append(
+            ft.ListTile(
+                leading=ft.Icon(name=ft.icons.ADMIN_PANEL_SETTINGS, color=ft.Colors.WHITE),
+                title=ft.Text("Admin Login", color=ft.Colors.WHITE),
+                on_click=lambda e: go_to_view(page, admin_login_view, games)
+            )
+        )
+        left_panel_controls.append(
+            ft.ListTile(
+                leading=ft.Icon(name=ft.icons.GAMEPAD, color=ft.Colors.WHITE),
+                title=ft.Text("Play as Guest", color=ft.Colors.WHITE),
+                on_click=lambda e: guest_login(page, games)
+            )
+        )
+        left_panel_controls.append(
+            ft.ListTile(
+                leading=ft.Icon(name=ft.icons.SETTINGS, color=ft.Colors.WHITE),
+                title=ft.Text("Settings", color=ft.Colors.WHITE),
+                on_click=lambda e: go_to_view(page, settings_view, games)
+            )
+        )
+        left_panel_controls.append(
+            ft.ListTile(
+                leading=ft.Icon(name=ft.icons.EXIT_TO_APP, color=ft.Colors.WHITE),
+                title=ft.Text("Exit", color=ft.Colors.WHITE),
+                on_click=exit_application
+            )
+        )
+
+    # Left panel container with updated app theme (using purple background).
+    left_panel = ft.Container(
+        width=300,
+        bgcolor=ft.Colors.PURPLE,
+        padding=20,
+        content=ft.Column(
+            left_panel_controls,
+            spacing=10,
+            alignment=ft.MainAxisAlignment.START,
+        ),
+    )
+
+    # Right panel: background image plus welcome text and description.
+    right_panel = ft.Container(
+        expand=True,
+        padding=20,
+        content=ft.Column(
+            [
+                ft.Container(
+                    content=ft.Image(
+                        src="assets/logo.png",  # Replace with your actual image path if needed.
+                        width=600,
+                        height=350,
+                        fit=ft.ImageFit.COVER
+                    ),
+                ),
+                ft.Text("Welcome to Playful Minds!", size=28, weight="bold", color=ft.Colors.PURPLE),
+                ft.Text(
+                    "Playful Minds is a collection of fun, educational games. "
+                    "Log in to track your progress, or play as a guest.",
+                    size=16,
+                    text_align=ft.TextAlign.JUSTIFY,
+                    color=ft.Colors.PURPLE
+                ),
+            ],
+            spacing=20,
+            alignment=ft.MainAxisAlignment.CENTER,
+        ),
+    )
+
+    # Overall layout: Row containing left and right panels.
     page.views.append(
         ft.View(
             route="/",
             controls=[
-                ft.Column(
-                    [
-                        ft.Text("Welcome to Playful Minds!", size=32, weight="bold", color=ft.Colors.PURPLE),
-                        ft.Text(
-                            "Playful Minds is a collection of fun, educational games.\n"
-                            "Log in to track your progress, or play as a guest.",
-                            size=20, color=ft.Colors.PURPLE, text_align=ft.TextAlign.CENTER
-                        ),
-                        ft.Row(
-                            [
-                                ft.ElevatedButton("Player Login", on_click=lambda e: go_to_view(page, player_login_view, games)),
-                                ft.ElevatedButton("Create Player Account", on_click=lambda e: go_to_view(page, create_player_account_view, games)),
-                                ft.ElevatedButton("Create Admin Account", on_click=lambda e: go_to_view(page, create_admin_account_view, games)),
-                            ],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=20,
-                        ),
-                        ft.Row(
-                            [
-                                ft.ElevatedButton("Play as Guest", on_click=lambda e: guest_login(page, games)),
-                                ft.ElevatedButton("Admin Login", on_click=lambda e: go_to_view(page, admin_login_view, games)),
-                            ],
-                            alignment=ft.MainAxisAlignment.CENTER,
-                            spacing=20,
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    spacing=30,
+                ft.Row(
+                    controls=[left_panel, right_panel],
+                    expand=True
                 )
             ],
         )
     )
     page.update()
-
 # -------------------- Player Login View --------------------
 def player_login_view(page: ft.Page, games):
     def do_login(e):
@@ -124,6 +223,12 @@ def player_logout(page: ft.Page, games):
 
 # -------------------- Admin Login View --------------------
 def admin_login_view(page: ft.Page, games):
+    def toggle_password_visibility(field: ft.TextField):
+        field.password = not field.password
+        new_icon = ft.icons.VISIBILITY_OFF if not field.password else ft.icons.VISIBILITY
+        field.suffix = ft.IconButton(icon=new_icon, on_click=lambda e: toggle_password_visibility(field))
+        page.update()
+
     def do_admin_login(e):
         username = admin_username.value.strip()
         pwd = admin_password.value.strip()
@@ -144,9 +249,27 @@ def admin_login_view(page: ft.Page, games):
         else:
             error_text.value = "Incorrect password."
             page.update()
+
     admin_username = ft.TextField(label="Admin Username")
-    admin_password = ft.TextField(label="Password", password=True)
+
+    admin_password = ft.TextField(
+        label="Password",
+        password=True,
+        suffix=ft.IconButton(icon=ft.icons.VISIBILITY, on_click=lambda e: toggle_password_visibility(admin_password))
+    )
+
     error_text = ft.Text("", color=ft.Colors.RED)
+
+    # "Forgot Password?" button is left-aligned directly below the password field.
+    forgot_password_button = ft.TextButton(
+        "Forgot Password?",
+        on_click=lambda e: go_to_view(page, forgot_password_view, games),
+        style=ft.ButtonStyle(
+            padding=ft.Padding(0, 0, 0, 0),
+            alignment=ft.alignment.center_left
+        )
+    )
+
     page.views.clear()
     page.views.append(
         ft.View(
@@ -157,9 +280,69 @@ def admin_login_view(page: ft.Page, games):
                         ft.Text("Admin Login", size=32, weight="bold", color=ft.Colors.PURPLE),
                         admin_username,
                         admin_password,
+                        ft.Row([forgot_password_button], alignment=ft.MainAxisAlignment.START),  # Left-align the button
                         error_text,
                         ft.ElevatedButton("Log In", on_click=do_admin_login),
                         ft.TextButton("Back", on_click=lambda e: go_to_view(page, landing_view, games)),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=10,  # Reduced spacing to make the layout compact
+                )
+            ],
+        )
+    )
+    page.update()
+
+
+# -------------------- Forgot Password View --------------------
+def forgot_password_view(page: ft.Page, games):
+    def do_reset_password(e):
+        username = username_field.value.strip()
+        email = email_field.value.strip()
+        if username == "" or email == "":
+            error_text.value = "Username and email are required."
+            page.update()
+            return
+        # Verify the account exists and the email matches.
+        user = db.load_user_by_username(username)
+        if user is None or user.get("email", "").lower() != email.lower():
+            error_text.value = "Account not found or email does not match."
+            page.update()
+            return
+        # Generate a new strong password.
+        new_password = generate_strong_password()
+        # Hash the new password.
+        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        # Update the admin's password in the database.
+        db.update_user_password(user["id"], hashed_password)  # Ensure this function exists in your db module.
+        # Send an email with the new password.
+        subject, plain_text, html_content = forgot_password_template(new_password)
+        mail.send_email(user["email"], subject, plain_text,
+                        html_content)  # Ensure send_email exists in your mail module.
+        success_text.value = "A new password has been generated and sent to your email."
+        error_text.value = ""
+        page.update()
+
+    username_field = ft.TextField(label="Username")
+    email_field = ft.TextField(label="Email")
+    error_text = ft.Text("", color=ft.Colors.RED)
+    success_text = ft.Text("", color=ft.Colors.GREEN)
+
+    page.views.clear()
+    page.views.append(
+        ft.View(
+            route="/forgot_password",
+            controls=[
+                ft.Column(
+                    [
+                        ft.Text("Forgot Password", size=32, weight="bold", color=ft.Colors.PURPLE),
+                        username_field,
+                        email_field,
+                        error_text,
+                        ft.ElevatedButton("Reset Password", on_click=do_reset_password),
+                        success_text,
+                        ft.TextButton("Back", on_click=lambda e: go_to_view(page, admin_login_view, games)),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -367,8 +550,10 @@ def game_selection_view(page: ft.Page, games):
     )
     page.update()
 
+
 def settings_view(page: ft.Page, games):
     current_idx = utils.load_camera_index()
+
     def camera_changed(e: ft.ControlEvent):
         try:
             idx = int(camera_dropdown.value)
@@ -377,12 +562,25 @@ def settings_view(page: ft.Page, games):
         except Exception as ex:
             notification_text.value = f"Error: {ex}"
         page.update()
+
     camera_dropdown = ft.Dropdown(
         value=str(current_idx),
         options=[ft.dropdown.Option(str(i)) for i in range(4)],
         on_change=camera_changed,
     )
     notification_text = ft.Text("", color=ft.Colors.GREEN)
+
+    # Back button now checks if the current user is a player.
+    back_button = ft.ElevatedButton(
+        "Back",
+        on_click=lambda e: go_to_view(
+            page,
+            game_selection_view if (
+                        current_user and current_user.get("role", "").lower() == "player") else landing_view,
+            games
+        )
+    )
+
     page.views.clear()
     page.views.append(
         ft.View(
@@ -394,7 +592,7 @@ def settings_view(page: ft.Page, games):
                         ft.Text("Select Camera Index:", size=20, color=ft.Colors.PURPLE),
                         camera_dropdown,
                         notification_text,
-                        ft.ElevatedButton("Back", on_click=lambda e: go_to_view(page, game_selection_view, games)),
+                        back_button,
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -404,6 +602,7 @@ def settings_view(page: ft.Page, games):
         )
     )
     page.update()
+
 
 # -------------------- Enhanced Admin Dashboard with Reports & User Management --------------------
 def admin_logout(page: ft.Page, games):
@@ -479,6 +678,9 @@ def update_user_view(page: ft.Page, games, user_id):
         )
     )
     page.update()
+
+#Start of Dashboard View
+
 def admin_dashboard_view(page: ft.Page, games):
     global current_user  # Declare global before using it
     # Display a welcome line for the admin using session data.
@@ -584,7 +786,6 @@ def admin_dashboard_view(page: ft.Page, games):
     )
 
     # NEW: Build Player Progress Report as a DataTable.
-    # Retrieve progress records from the database.
     progress_records = db.get_all_player_progress()  # Ensure this function is implemented in db.py
     progress_table = ft.DataTable(
         columns=[
@@ -646,14 +847,25 @@ def admin_dashboard_view(page: ft.Page, games):
                 text="User Management",
                 content=ft.Column(
                     controls=[
+                        # Header for the User Management tab.
                         ft.Text("User Management", size=24, weight="bold"),
+                        # New buttons for account creation.
+                        ft.Row(
+                            controls=[
+                                ft.ElevatedButton("Create Player Account", on_click=lambda e: go_to_view(page, create_player_account_view, games)),
+                                ft.ElevatedButton("Create Admin Account", on_click=lambda e: go_to_view(page, create_admin_account_view, games)),
+                            ],
+                            spacing=20,
+                            alignment=ft.MainAxisAlignment.CENTER,
+                        ),
+                        ft.Divider(),
+                        # Then the users table appears.
                         users_table,
                     ],
                     scroll=True,
                     spacing=10
                 )
             ),
-            # New Tab for Player Progress
             ft.Tab(
                 text="Player Progress",
                 content=ft.Column(
