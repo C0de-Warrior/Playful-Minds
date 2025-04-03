@@ -16,7 +16,7 @@ def save_current_user(user):
     with open(current_user_path, "w") as f:
         json.dump(user, f)
 
-
+#comment
 def clear_current_user():
     """Clear the persisted current user data."""
     current_user_path = os.path.join(os.getcwd(), "config", "current_user.json")
