@@ -35,7 +35,7 @@ def start_game_session(user_id, game_id, session_type, level=1):
     Starts a new game session and returns the session ID.
     The level parameter allows tracking the player's level during the session.
     """
-    conn = sqlite3.connect("playful_minds.db")
+    conn = sqlite3.connect("../playful_minds.db")
     cursor = conn.cursor()
     try:
         start_time = datetime.datetime.now().isoformat()
@@ -61,7 +61,7 @@ def end_game_session(session_id, user_id, game_id, level_increment=0):
     level_increment (an integer > 0) will be added to the player's overall level
     for the specified game.
     """
-    conn = sqlite3.connect("playful_minds.db")
+    conn = sqlite3.connect("../playful_minds.db")
     cursor = conn.cursor()
     try:
         end_time = datetime.datetime.now().isoformat()

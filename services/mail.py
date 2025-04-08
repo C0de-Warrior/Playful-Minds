@@ -4,6 +4,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os  # Use os.environ to load environment variables
 from dotenv import load_dotenv
+import string
+import random
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -109,7 +111,8 @@ def report_email_template(report_content):
 
 # -------------------- Functions to Send Specific Emails --------------------
 def send_forgot_password_email(to_email):
-    subject, plain_text, html_content = forgot_password_template()
+
+    subject, plain_text, html_content = forgot_password_template(new_password)
     return send_email(to_email, subject, html_content, plain_text)
 
 def send_welcome_admin_email(to_email, admin_first_name):
@@ -127,10 +130,11 @@ def send_report_email(to_email, report_content):
 # -------------------- Example Usage --------------------
 if __name__ == "__main__":
     # For testing purposes only
-    test_recipient = "recipient@example.com"
+    test_recipient = "godzit@africau.edu"
     # Test sending a forgot password email
+    new_password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
     reset_link = "http://playfulminds.com/reset?token=abc123"
-    send_forgot_password_email(test_recipient, reset_link)
+    send_forgot_password_email(test_recipient)
     # Test sending a welcome admin email
     send_welcome_admin_email(test_recipient, "Alice")
     # Test sending a player account notice email

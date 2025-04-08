@@ -1,28 +1,44 @@
 import flet as ft
 import os
-import sys
 import bcrypt  # for checking hashed passwords in admin login
 import datetime
 from services import db, utils, mail, sessions, logs
 import json
 from services.mail import forgot_password_template
+import string
+import secrets
+
 
 # Helper function to generate a strong password.
+def back_navigation_view(page: ft.Page, games):
+    # Check if current_user exists and is an admin
+    if current_user and current_user.get("role", "").lower() == "admin":
+        return admin_dashboard_view
+    else:
+        return landing_view
+
+
+def select_tab(tabs_obj, index):
+    return lambda e: setattr(tabs_obj, "selected_index", index)
+
+
 def generate_strong_password(length=12):
     characters = string.ascii_letters + string.digits + string.punctuation
     while True:
         password = ''.join(secrets.choice(characters) for _ in range(length))
         if (any(c.islower() for c in password) and
-            any(c.isupper() for c in password) and
-            any(c.isdigit() for c in password) and
-            any(c in string.punctuation for c in password)):
+                any(c.isupper() for c in password) and
+                any(c.isdigit() for c in password) and
+                any(c in string.punctuation for c in password)):
             return password
+
 
 def exit_application(e):
     # Log the exit action; if no user is logged in, use 0 as the ID.
     user_id = current_user.get("id", 0) if "current_user" in globals() and current_user else 0
     logs.log_event(user_id, "exit", "User exited the application.")
-    sys.exit()
+    e.page.window_close()  # Corrected method to close the Flet app.
+
 
 def save_current_user(user):
     """Persist the current user data to a JSON file.  """
@@ -33,7 +49,8 @@ def save_current_user(user):
     with open(current_user_path, "w") as f:
         json.dump(user, f)
 
-#comment
+
+# comment
 def clear_current_user():
     """Clear the persisted current user data."""
     current_user_path = os.path.join(os.getcwd(), "config", "current_user.json")
@@ -43,6 +60,7 @@ def clear_current_user():
 
 # Global current_user variable for session tracking
 current_user = None
+
 
 # -------------------- Landing View --------------------
 def landing_view(page: ft.Page, games):
@@ -59,7 +77,7 @@ def landing_view(page: ft.Page, games):
     if not admin_exists:
         # No admin account exists: prompt user to create one.
         left_panel_controls.append(
-            ft.Text("Welcome! Please create an admin account to get started.", size=18, weight="bold",
+            ft.Text("Welcome! Please create an admin account to get started.", size=18, weight=ft.FontWeight.BOLD,
                     color=ft.Colors.WHITE)
         )
         left_panel_controls.append(ft.Divider(color=ft.Colors.WHITE))
@@ -141,7 +159,7 @@ def landing_view(page: ft.Page, games):
                         fit=ft.ImageFit.COVER
                     ),
                 ),
-                ft.Text("Welcome to Playful Minds!", size=28, weight="bold", color=ft.Colors.PURPLE),
+                ft.Text("Welcome to Playful Minds!", size=28, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE),
                 ft.Text(
                     "Playful Minds is a collection of fun, educational games. "
                     "Log in to track your progress, or play as a guest.",
@@ -168,6 +186,8 @@ def landing_view(page: ft.Page, games):
         )
     )
     page.update()
+
+
 # -------------------- Player Login View --------------------
 def player_login_view(page: ft.Page, games):
     def do_login(e):
@@ -186,6 +206,7 @@ def player_login_view(page: ft.Page, games):
         # Save current user info to file for use by game modules.
         save_current_user(user)
         go_to_view(page, game_selection_view, games)
+
     username_field = ft.TextField(label="Username")
     error_text = ft.Text("", color=ft.Colors.RED)
     page.views.clear()
@@ -195,7 +216,7 @@ def player_login_view(page: ft.Page, games):
             controls=[
                 ft.Column(
                     [
-                        ft.Text("Player Login", size=32, weight="bold", color=ft.Colors.PURPLE),
+                        ft.Text("Player Login", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE),
                         username_field,
                         error_text,
                         ft.ElevatedButton("Log In", on_click=do_login),
@@ -209,6 +230,7 @@ def player_login_view(page: ft.Page, games):
         )
     )
     page.update()
+
 
 # -------------------- Player Log out --------------------
 def player_logout(page: ft.Page, games):
@@ -277,7 +299,7 @@ def admin_login_view(page: ft.Page, games):
             controls=[
                 ft.Column(
                     [
-                        ft.Text("Admin Login", size=32, weight="bold", color=ft.Colors.PURPLE),
+                        ft.Text("Admin Login", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE),
                         admin_username,
                         admin_password,
                         ft.Row([forgot_password_button], alignment=ft.MainAxisAlignment.START),  # Left-align the button
@@ -336,7 +358,7 @@ def forgot_password_view(page: ft.Page, games):
             controls=[
                 ft.Column(
                     [
-                        ft.Text("Forgot Password", size=32, weight="bold", color=ft.Colors.PURPLE),
+                        ft.Text("Forgot Password", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE),
                         username_field,
                         email_field,
                         error_text,
@@ -352,6 +374,7 @@ def forgot_password_view(page: ft.Page, games):
         )
     )
     page.update()
+
 
 # -------------------- Account Creation Views --------------------
 def create_player_account_view(page: ft.Page, games):
@@ -378,6 +401,8 @@ def create_player_account_view(page: ft.Page, games):
             return
         creation_date = datetime.datetime.now().isoformat()
         db.save_user(fname, lname, uname, "player", "", email, creation_date)
+        # Log the player account creation.
+        logs.log_event(0, "create_player_account", f"Player account '{uname}' created.")
         success_text.value = f"Player account '{uname}' created successfully!"
         error_text.value = ""
         page.update()
@@ -389,6 +414,7 @@ def create_player_account_view(page: ft.Page, games):
     username_error = ft.Text("", color=ft.Colors.RED)
     error_text = ft.Text("", color=ft.Colors.RED)
     success_text = ft.Text("", color=ft.Colors.GREEN)
+
     page.views.clear()
     page.views.append(
         ft.View(
@@ -396,7 +422,7 @@ def create_player_account_view(page: ft.Page, games):
             controls=[
                 ft.Column(
                     [
-                        ft.Text("Create Player Account", size=32, weight="bold", color=ft.Colors.PURPLE),
+                        ft.Text("Create Player Account", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE),
                         first_name_field,
                         last_name_field,
                         username_field,
@@ -405,7 +431,10 @@ def create_player_account_view(page: ft.Page, games):
                         error_text,
                         success_text,
                         ft.ElevatedButton("Create Account", on_click=do_create_player),
-                        ft.TextButton("Back", on_click=lambda e: go_to_view(page, landing_view, games)),
+                        ft.TextButton(
+                            "Back",
+                            on_click=lambda e: go_to_view(page, back_navigation_view(page, games), games)
+                        ),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -416,12 +445,14 @@ def create_player_account_view(page: ft.Page, games):
     )
     page.update()
 
+
 def create_admin_account_view(page: ft.Page, games):
     def validate_passwords(e):
         if password_field.value != confirm_password_field.value:
             password_error.value = "Passwords do not match."
         elif not utils.is_strong_password(password_field.value):
-            password_error.value = "Password must be at least 8 characters with uppercase, lowercase, number, and symbol."
+            password_error.value = ("Password must be at least 8 characters with uppercase, lowercase, number, "
+                                    "and symbol.")
         else:
             password_error.value = ""
         page.update()
@@ -448,19 +479,23 @@ def create_admin_account_view(page: ft.Page, games):
         hashed_pwd = bcrypt.hashpw(pwd.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         creation_date = datetime.datetime.now().isoformat()
         db.save_user(fname, lname, uname, "admin", hashed_pwd, email, creation_date)
+        # Log the admin account creation.
+        logs.log_event(0, "create_admin_account", f"Admin account '{uname}' created.")
         success_text.value = f"Admin account '{uname}' created successfully!"
         error_text.value = ""
         page.update()
 
     first_name_field = ft.TextField(label="First Name")
     last_name_field = ft.TextField(label="Last Name")
-    username_field = ft.TextField(label="Username", value="ClassName_Admin", tooltip="Suggested pattern: ClassName_Admin#")
+    username_field = ft.TextField(label="Username", value="ClassName_Admin",
+                                  tooltip="Suggested pattern: ClassName_Admin#")
     email_field = ft.TextField(label="Email")
     password_field = ft.TextField(label="Password", password=True, on_change=validate_passwords)
     confirm_password_field = ft.TextField(label="Confirm Password", password=True, on_change=validate_passwords)
     password_error = ft.Text("", color=ft.Colors.RED)
     error_text = ft.Text("", color=ft.Colors.RED)
     success_text = ft.Text("", color=ft.Colors.GREEN)
+
     page.views.clear()
     page.views.append(
         ft.View(
@@ -468,7 +503,7 @@ def create_admin_account_view(page: ft.Page, games):
             controls=[
                 ft.Column(
                     [
-                        ft.Text("Create Admin Account", size=32, weight="bold", color=ft.Colors.PURPLE),
+                        ft.Text("Create Admin Account", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE),
                         first_name_field,
                         last_name_field,
                         username_field,
@@ -479,7 +514,10 @@ def create_admin_account_view(page: ft.Page, games):
                         error_text,
                         success_text,
                         ft.ElevatedButton("Create Account", on_click=do_create_admin),
-                        ft.TextButton("Back", on_click=lambda e: go_to_view(page, landing_view, games)),
+                        ft.TextButton(
+                            "Back",
+                            on_click=lambda e: go_to_view(page, back_navigation_view(page, games), games)
+                        ),
                     ],
                     alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -490,11 +528,13 @@ def create_admin_account_view(page: ft.Page, games):
     )
     page.update()
 
+
 # -------------------- Game Selection & Guest Login --------------------
 def guest_login(page: ft.Page, games):
     global current_user
     current_user = {"id": 0, "userName": "Guest", "role": "player", "email": ""}
     go_to_view(page, game_selection_view, games)
+
 
 def game_selection_view(page: ft.Page, games):
     game_items = []
@@ -512,7 +552,7 @@ def game_selection_view(page: ft.Page, games):
                     ft.Container(content=img, width=100, height=100),
                     ft.Column(
                         [
-                            ft.Text(game["title"], size=20, weight="bold", color=ft.Colors.WHITE),
+                            ft.Text(game["title"], size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
                             ft.Text(game["description"], size=16, color=ft.Colors.WHITE),
                         ],
                         expand=True, spacing=5,
@@ -525,6 +565,14 @@ def game_selection_view(page: ft.Page, games):
             on_click=lambda e, file=game["file"]: utils.launch_game(file),
         )
         game_items.append(item)
+
+    # Create a welcome message based on session data.
+    welcome_message = (
+        "Welcome, Guest!"
+        if current_user.get("id", 0) == 0
+        else f"Welcome, {current_user.get('firstName', 'Player')}!"
+    )
+
     page.views.clear()
     page.views.append(
         ft.View(
@@ -532,7 +580,9 @@ def game_selection_view(page: ft.Page, games):
             controls=[
                 ft.Column(
                     [
-                        ft.Text("Select a Game", size=32, weight="bold", color=ft.Colors.PURPLE),
+                        # Added welcome text:
+                        ft.Text(welcome_message, size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE),
+                        ft.Text("Select a Game", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE),
                         ft.ListView(expand=True, spacing=10, controls=game_items),
                         ft.Row(
                             [
@@ -576,7 +626,7 @@ def settings_view(page: ft.Page, games):
         on_click=lambda e: go_to_view(
             page,
             game_selection_view if (
-                        current_user and current_user.get("role", "").lower() == "player") else landing_view,
+                    current_user and current_user.get("role", "").lower() == "player") else landing_view,
             games
         )
     )
@@ -588,7 +638,7 @@ def settings_view(page: ft.Page, games):
             controls=[
                 ft.Column(
                     [
-                        ft.Text("Settings", size=32, weight="bold", color=ft.Colors.PURPLE),
+                        ft.Text("Settings", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE),
                         ft.Text("Select Camera Index:", size=20, color=ft.Colors.PURPLE),
                         camera_dropdown,
                         notification_text,
@@ -613,10 +663,12 @@ def admin_logout(page: ft.Page, games):
     # Navigate back to the landing view.
     go_to_view(page, landing_view, games)
 
+
 def delete_and_refresh(page: ft.Page, games, user_id):
     db.delete_user(user_id)
     logs.log_event(user_id, "delete", "User account deleted by admin.")
     go_to_view(page, admin_dashboard_view, games)
+
 
 def update_user_view(page: ft.Page, games, user_id):
     user_data = db.get_user_by_id(user_id)
@@ -654,7 +706,7 @@ def update_user_view(page: ft.Page, games, user_id):
             controls=[
                 ft.Column(
                     controls=[
-                        ft.Text("Update User", size=32, weight="bold", color=ft.Colors.PURPLE),
+                        ft.Text("Update User", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.PURPLE),
                         first_name_field,
                         last_name_field,
                         username_field,
@@ -679,21 +731,128 @@ def update_user_view(page: ft.Page, games, user_id):
     )
     page.update()
 
-#Start of Dashboard View
 
+# Placeholder functions for new analytics DB queries (to be implemented in db.py)
+# --- Dummy Export/Print/Email Functions (to be implemented as needed) ---
+def export_table_to_csv(data, filename):
+    import csv
+    with open(filename, "w", newline="") as f:
+        writer = csv.writer(f)
+        for row in data:
+            writer.writerow(row)
+
+
+# In pages.py replace placeholder functions with:
+
+def get_active_users_count():
+    return db.get_active_users_count()
+
+
+def get_total_sessions():
+    return db.get_total_sessions()
+
+
+def get_avg_session_duration():
+    stats = db.load_overall_session_stats()
+    return round(stats.get("total_play_time", 0) / (stats.get("session_count", 1) or 1), 1)
+
+
+def get_avg_level_gain():
+    return db.get_avg_level_gain()  # Requires similar DB function
+
+
+def get_game_play_counts(order="desc", limit=3):
+    return db.get_game_play_counts(limit=limit, order=order)
+
+
+def get_top_players_by_level_up(limit=5, days=7):
+    return db.get_top_players_by_level(limit=limit, days=days)
+
+
+def get_inactive_players(days=3):
+    return db.get_inactive_players(days=days)  # Requires similar DB function
+
+
+# Start of Dashboard View
+
+# New Admin Dashboard View
+# --- Navigation Helper Function ---
+def go_to_view(page: ft.Page, view_func, games):
+    page.views.clear()  # Clear all existing views
+    view_func(page, games)  # Call the view function to build the new view
+    page.update()  # Refresh the page
+
+
+# --- Test View (for debugging navigation) ---
+def test_view(page: ft.Page, games):
+    page.views.clear()
+    page.views.append(
+        ft.View(
+            route="/test",
+            controls=[
+                ft.Column(
+                    controls=[
+                        ft.Text("Test View", size=32, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE),
+                        ft.ElevatedButton("Back to Dashboard",
+                                          on_click=lambda e: go_to_view(page, admin_dashboard_view, games))
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=20
+                )
+            ]
+        )
+    )
+    page.update()
+
+
+# --- Updated Admin Dashboard View ---
 def admin_dashboard_view(page: ft.Page, games):
-    global current_user  # Declare global before using it
-    # Display a welcome line for the admin using session data.
+    global current_user  # Ensure current_user is available
+
+    # --- Welcome Header & Navigation ---
     welcome_line = ft.Text(
         f"Welcome, {current_user.get('firstName', current_user.get('userName', 'Admin'))}!",
-        size=24, weight="bold", color=ft.Colors.BLUE
+        size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE
+    )
+    nav_bar = ft.Row(
+        controls=[
+            ft.ElevatedButton("Refresh", on_click=lambda event: go_to_view(page, admin_dashboard_view, games)),
+            ft.ElevatedButton("Log Out", on_click=lambda event: admin_logout(page, games))
+        ],
+        alignment=ft.MainAxisAlignment.CENTER,
+        spacing=20
     )
 
-    # Retrieve player accounts (role "player")
+    # --- KPI Cards Section ---
+    def kpi_card(title, value):
+        return ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text(title, size=16),
+                    ft.Text(str(value), size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN)
+                ],
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER
+            ),
+            padding=10,
+            bgcolor=ft.Colors.PURPLE,
+            border_radius=8,
+            width=250
+        )
+
+    kpi_cards = ft.Row(
+        controls=[
+            kpi_card("Active Users", db.get_active_users_count()),
+            kpi_card("Total Sessions", db.get_total_sessions()),
+            kpi_card("Avg Session (min)", db.get_avg_session_duration()),
+            kpi_card("Avg Levels", db.get_avg_level_gain())
+        ],
+        spacing=20
+    )
+
+    # --- Player Accounts Tab ---
     accounts = db.load_accounts()
     player_accounts = [acct for acct in accounts.values() if acct["role"].lower() == "player"]
-
-    # Build Player Accounts Report as a DataTable with headers.
     player_table = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("First Name")),
@@ -706,58 +865,141 @@ def admin_dashboard_view(page: ft.Page, games):
                 ft.DataCell(ft.Text(p.get("firstName", ""))),
                 ft.DataCell(ft.Text(p.get("lastName", ""))),
                 ft.DataCell(ft.Text(p.get("userName", ""))),
-                ft.DataCell(ft.Text(" | ".join(
-                    [f"{game['title']}: Lvl {db.get_player_level(p.get('id', 0), game.get('game_id', game.get('title')))}"
-                     for game in games]
-                )))
+                ft.DataCell(ft.Text(" | ".join([
+                    f"{game.get('title', 'Unknown')}: Lvl {db.get_player_level(p.get('id', 0),
+                                                                               game.get('game_id', game.get('title', '')))}"
+                    for game in games
+                ])))
             ])
             for p in player_accounts
         ]
     )
+    player_accounts_section = ft.Column(
+        controls=[
+            ft.Text("Player Accounts Report", size=24, weight=ft.FontWeight.BOLD),
+            player_table,
+        ],
+        scroll=ft.ScrollMode.AUTO,
+        spacing=10
+    )
 
-    # Build Session Statistics Report with headers.
-    overall_stats = db.load_overall_session_stats()
-    session_stats_table = ft.DataTable(
+    # --- Sessions Stats Tab ---
+    conn = db._create_connection()
+    sessions_table = None
+    if conn is not None:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT session_id, user_id, game_id, start_time, end_time, session_type, level
+                FROM GameSessions
+            """)
+            session_rows = cursor.fetchall()
+            sessions_table = ft.DataTable(
+                columns=[
+                    ft.DataColumn(ft.Text("Session ID")),
+                    ft.DataColumn(ft.Text("User ID")),
+                    ft.DataColumn(ft.Text("Game ID")),
+                    ft.DataColumn(ft.Text("Start Time")),
+                    ft.DataColumn(ft.Text("End Time")),
+                    ft.DataColumn(ft.Text("Session Type")),
+                    ft.DataColumn(ft.Text("Level"))
+                ],
+                rows=[
+                    ft.DataRow(cells=[
+                        ft.DataCell(ft.Text(str(row[0]))),
+                        ft.DataCell(ft.Text(str(row[1]))),
+                        ft.DataCell(ft.Text(row[2])),
+                        ft.DataCell(ft.Text(row[3])),
+                        ft.DataCell(ft.Text(row[4] if row[4] is not None else "N/A")),
+                        ft.DataCell(ft.Text(row[5] if row[5] is not None else "N/A")),
+                        ft.DataCell(ft.Text(str(row[6])))
+                    ])
+                    for row in session_rows
+                ]
+            )
+        except Exception as e:
+            print(f"Error fetching session stats: {e}")
+        finally:
+            conn.close()
+    sessions_section = ft.Column(
+        controls=[
+            ft.Text("Game Sessions", size=24, weight=ft.FontWeight.BOLD),
+            sessions_table if sessions_table is not None else ft.Text("No session data available."),
+        ],
+        scroll=ft.ScrollMode.AUTO,
+        spacing=10
+    )
+
+    # --- Player Progress Tab ---
+    progress_records = db.get_all_player_progress()
+    progress_table = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("Statistic")),
-            ft.DataColumn(ft.Text("Value"))
+            ft.DataColumn(ft.Text("User ID")),
+            ft.DataColumn(ft.Text("Game ID")),
+            ft.DataColumn(ft.Text("Level")),
+            ft.DataColumn(ft.Text("Points")),
+            ft.DataColumn(ft.Text("Last Updated"))
         ],
         rows=[
             ft.DataRow(cells=[
-                ft.DataCell(ft.Text("Total Play Time (min)")),
-                ft.DataCell(ft.Text(str(int(overall_stats.get("total_play_time", 0)))))
-            ]),
-            # Add more stats here if available.
+                ft.DataCell(ft.Text(str(record.get("user_id", "")))),
+                ft.DataCell(ft.Text(record.get("game_id", ""))),
+                ft.DataCell(ft.Text(str(record.get("level", "")))),
+                ft.DataCell(ft.Text(str(record.get("points", "")))),
+                ft.DataCell(ft.Text(record.get("updated_at", "")))
+            ])
+            for record in progress_records
         ]
     )
+    progress_section = ft.Column(
+        controls=[
+            ft.Text("Player Progress Report", size=24, weight=ft.FontWeight.BOLD),
+            progress_table,
+        ],
+        scroll=ft.ScrollMode.AUTO,
+        spacing=10
+    )
 
-    # Build Logs Report as a DataTable (fetch recent logs; limit 20).
+    # --- Logs Tab ---
     log_entries = logs.get_logs(limit=20)
     logs_table = ft.DataTable(
         columns=[
             ft.DataColumn(ft.Text("Timestamp")),
             ft.DataColumn(ft.Text("User ID")),
             ft.DataColumn(ft.Text("Action")),
-            ft.DataColumn(ft.Text("Details")),
+            ft.DataColumn(ft.Text("Details"))
         ],
         rows=[
             ft.DataRow(cells=[
                 ft.DataCell(ft.Text(entry.get("timestamp", ""))),
                 ft.DataCell(ft.Text(str(entry.get("user_id", "")))),
                 ft.DataCell(ft.Text(entry.get("action", ""))),
-                ft.DataCell(ft.Text(entry.get("details", ""))),
+                ft.DataCell(ft.Text(entry.get("details", "")))
             ])
             for entry in log_entries
         ]
     )
+    logs_section = ft.Column(
+        controls=[
+            ft.Text("Recent Logs", size=24, weight=ft.FontWeight.BOLD),
+            logs_table,
+        ],
+        scroll=ft.ScrollMode.AUTO,
+        spacing=10
+    )
 
-    # Build User Management Report as a DataTable with Update and Delete options.
+    # --- User Management Tab ---
     user_entries = []
-    for user_id, u in accounts.items():
+    for user_key, u in accounts.items():
         actions = ft.Row(
             controls=[
-                ft.ElevatedButton("Update", on_click=lambda e, uid=u["id"]: go_to_view(page, lambda p, g: update_user_view(p, g, uid), games)),
-                ft.ElevatedButton("Delete", on_click=lambda e, uid=u["id"]: delete_and_refresh(page, games, uid)),
+                ft.ElevatedButton("Update", on_click=lambda event, uid=u["id"]: go_to_view(page,
+                                                                                           lambda p,
+                                                                                                  g: update_user_view(p,
+                                                                                                                      g,
+                                                                                                                      uid),
+                                                                                           games)),
+                ft.ElevatedButton("Delete", on_click=lambda event, uid=u["id"]: delete_and_refresh(page, games, uid))
             ],
             spacing=10
         )
@@ -769,7 +1011,7 @@ def admin_dashboard_view(page: ft.Page, games):
                 ft.DataCell(ft.Text(u.get("role", ""))),
                 ft.DataCell(ft.Text(u.get("email", ""))),
                 ft.DataCell(ft.Text(u.get("creationDate", ""))),
-                ft.DataCell(actions),
+                ft.DataCell(actions)
             ])
         )
     users_table = ft.DataTable(
@@ -780,117 +1022,130 @@ def admin_dashboard_view(page: ft.Page, games):
             ft.DataColumn(ft.Text("Role")),
             ft.DataColumn(ft.Text("Email")),
             ft.DataColumn(ft.Text("Created On")),
-            ft.DataColumn(ft.Text("Actions")),
+            ft.DataColumn(ft.Text("Actions"))
         ],
         rows=user_entries
     )
-
-    # NEW: Build Player Progress Report as a DataTable.
-    progress_records = db.get_all_player_progress()  # Ensure this function is implemented in db.py
-    progress_table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("User ID")),
-            ft.DataColumn(ft.Text("Game ID")),
-            ft.DataColumn(ft.Text("Level")),
-            ft.DataColumn(ft.Text("Points")),
-            ft.DataColumn(ft.Text("Last Updated")),
+    user_management_section = ft.Column(
+        controls=[
+            ft.Text("User Management", size=24, weight=ft.FontWeight.BOLD),
+            ft.Row(
+                controls=[
+                    ft.ElevatedButton("Create Player Account",
+                                      on_click=lambda e: go_to_view(page, create_player_account_view, games)),
+                    ft.ElevatedButton("Create Admin Account",
+                                      on_click=lambda e: go_to_view(page, create_admin_account_view, games))
+                ],
+                spacing=20,
+                alignment=ft.MainAxisAlignment.CENTER
+            ),
+            ft.Divider(),
+            users_table
         ],
-        rows=[
-            ft.DataRow(cells=[
-                ft.DataCell(ft.Text(str(record.get("user_id", "")))),
-                ft.DataCell(ft.Text(record.get("game_id", ""))),
-                ft.DataCell(ft.Text(str(record.get("level", "")))),
-                ft.DataCell(ft.Text(str(record.get("points", "")))),
-                ft.DataCell(ft.Text(record.get("updated_at", ""))),
-            ])
-            for record in progress_records
-        ]
+        scroll=ft.ScrollMode.AUTO,
+        spacing=10
     )
 
-    # Create tabs for each report.
+    # --- Analytics Section (Using Dummy Data Functions) ---
+    top_games = get_game_play_counts(order="desc", limit=3)
+    bottom_games = get_game_play_counts(order="asc", limit=3)
+    top_players = get_top_players_by_level_up(limit=5, days=7)
+    inactive_players = get_inactive_players(days=3)
+
+    top_games_rows = [
+        ft.DataRow(cells=[
+            ft.DataCell(ft.Text(game["title"], color=ft.Colors.GREEN)),
+            ft.DataCell(ft.Text(str(game["session_count"]), color=ft.Colors.GREEN))
+        ])
+        for game in top_games
+    ]
+    top_games_table = ft.DataTable(
+        columns=[ft.DataColumn(ft.Text("Game")), ft.DataColumn(ft.Text("Sessions"))],
+        rows=top_games_rows
+    )
+    bottom_games_rows = [
+        ft.DataRow(cells=[
+            ft.DataCell(ft.Text(game["title"], color=ft.Colors.RED)),
+            ft.DataCell(ft.Text(str(game["session_count"]), color=ft.Colors.RED))
+        ])
+        for game in bottom_games
+    ]
+    bottom_games_table = ft.DataTable(
+        columns=[ft.DataColumn(ft.Text("Game")), ft.DataColumn(ft.Text("Sessions"))],
+        rows=bottom_games_rows
+    )
+    top_players_rows = [
+        ft.DataRow(cells=[
+            ft.DataCell(ft.Text(str(player["user_id"]))),
+            ft.DataCell(ft.Text(player["username"])),
+            ft.DataCell(ft.Text(str(player["level_gain"])))
+        ])
+        for player in top_players
+    ]
+    top_players_table = ft.DataTable(
+        columns=[ft.DataColumn(ft.Text("User ID")), ft.DataColumn(ft.Text("Username")),
+                 ft.DataColumn(ft.Text("Level Gain"))],
+        rows=top_players_rows
+    )
+    inactive_players_rows = [
+        ft.DataRow(cells=[
+            ft.DataCell(ft.Text(str(player["user_id"]))),
+            ft.DataCell(ft.Text(player["username"])),
+            ft.DataCell(ft.Text(player["last_update"]))
+        ])
+        for player in inactive_players
+    ]
+    inactive_players_table = ft.DataTable(
+        columns=[ft.DataColumn(ft.Text("User ID")), ft.DataColumn(ft.Text("Username")),
+                 ft.DataColumn(ft.Text("Last Update"))],
+        rows=inactive_players_rows
+    )
+    analytics_section = ft.Column(
+        controls=[
+            ft.Text("Analytics", size=24, weight=ft.FontWeight.BOLD),
+            ft.Row(
+                controls=[
+                    ft.Column(
+                        controls=[
+                            ft.Text("Top 3 Most Played Games", color=ft.Colors.GREEN),
+                            top_games_table,
+                            ft.Text("Bottom 3 Least Played Games", color=ft.Colors.RED),
+                            bottom_games_table
+                        ],
+                        spacing=10
+                    ),
+                    ft.Column(
+                        controls=[
+                            ft.Text("Top 5 Players by Level Gains", color=ft.Colors.GREEN),
+                            top_players_table,
+                            ft.Text("Players Inactive >3 Days", color=ft.Colors.RED),
+                            inactive_players_table
+                        ],
+                        spacing=10
+                    )
+                ],
+                spacing=20
+            )
+        ],
+        spacing=20,
+        scroll=ft.ScrollMode.AUTO,
+        expand=True
+    )
+
+    # --- Assemble All Tabs ---
     tabs = ft.Tabs(
         selected_index=0,
         tabs=[
-            ft.Tab(
-                text="Player Accounts",
-                content=ft.Column(
-                    controls=[
-                        ft.Text("Player Accounts Report", size=24, weight="bold"),
-                        player_table,
-                    ],
-                    scroll=True,
-                    spacing=10
-                )
-            ),
-            ft.Tab(
-                text="Session Stats",
-                content=ft.Column(
-                    controls=[
-                        ft.Text("Session Statistics", size=24, weight="bold"),
-                        session_stats_table,
-                    ],
-                    spacing=10
-                )
-            ),
-            ft.Tab(
-                text="Logs",
-                content=ft.Column(
-                    controls=[
-                        ft.Text("Recent Logs", size=24, weight="bold"),
-                        logs_table,
-                    ],
-                    scroll=True,
-                    spacing=10
-                )
-            ),
-            ft.Tab(
-                text="User Management",
-                content=ft.Column(
-                    controls=[
-                        # Header for the User Management tab.
-                        ft.Text("User Management", size=24, weight="bold"),
-                        # New buttons for account creation.
-                        ft.Row(
-                            controls=[
-                                ft.ElevatedButton("Create Player Account", on_click=lambda e: go_to_view(page, create_player_account_view, games)),
-                                ft.ElevatedButton("Create Admin Account", on_click=lambda e: go_to_view(page, create_admin_account_view, games)),
-                            ],
-                            spacing=20,
-                            alignment=ft.MainAxisAlignment.CENTER,
-                        ),
-                        ft.Divider(),
-                        # Then the users table appears.
-                        users_table,
-                    ],
-                    scroll=True,
-                    spacing=10
-                )
-            ),
-            ft.Tab(
-                text="Player Progress",
-                content=ft.Column(
-                    controls=[
-                        ft.Text("Player Progress Report", size=24, weight="bold"),
-                        progress_table,
-                    ],
-                    scroll=True,
-                    spacing=10
-                )
-            ),
+            ft.Tab(text="Player Accounts", content=player_accounts_section),
+            ft.Tab(text="Session Stats", content=sessions_section),
+            ft.Tab(text="Logs", content=logs_section),
+            ft.Tab(text="User Management", content=user_management_section),
+            ft.Tab(text="Player Progress", content=progress_section),
+            ft.Tab(text="Analytics", content=ft.Container(analytics_section, padding=10))
         ]
     )
 
-    # Navigation bar for the admin dashboard: Refresh and Log Out.
-    nav_bar = ft.Row(
-        controls=[
-            ft.ElevatedButton("Refresh", on_click=lambda e: go_to_view(page, admin_dashboard_view, games)),
-            ft.ElevatedButton("Log Out", on_click=lambda e: admin_logout(page, games)),
-        ],
-        alignment=ft.MainAxisAlignment.CENTER,
-        spacing=20
-    )
-
-    # Compose the dashboard view.
+    # --- Compose the Final Dashboard View ---
     page.views.clear()
     page.views.append(
         ft.View(
@@ -900,18 +1155,15 @@ def admin_dashboard_view(page: ft.Page, games):
                     controls=[
                         welcome_line,
                         ft.Divider(),
+                        kpi_cards,
                         nav_bar,
                         tabs,
                     ],
                     spacing=20,
                     expand=True,
+                    scroll=ft.ScrollMode.AUTO,
                 )
-            ],
+            ]
         )
     )
     page.update()
-
-
-# -------------------- Navigation Helper --------------------
-def go_to_view(page: ft.Page, view_func, games):
-    view_func(page, games)

@@ -3,7 +3,7 @@ import sqlite3
 import datetime
 
 # Define the database file – should be the same as used elsewhere.
-DB_FILE = os.path.join(os.getcwd(), "playful_minds.db")
+DB_FILE = os.path.join(os.getcwd(), "../playful_minds.db")
 
 def _create_connection():
     """Create and return a connection to the SQLite database."""
@@ -141,3 +141,19 @@ def update_player_progress(user_id, game_id, additional_points):
         finally:
             conn.close()
     return {"level": current_level, "points": new_points}
+
+# In levels.py add:
+
+def get_average_level_gain():
+    conn = _create_connection()
+    avg_level = 0
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT AVG(level_count) FROM PlayerProgress")
+            avg_level = cursor.fetchone()[0] or 0
+        except Exception as e:
+            print(f"Error getting average level: {e}")
+        finally:
+            conn.close()
+    return round(avg_level, 1)
